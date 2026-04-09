@@ -451,14 +451,13 @@ if __name__ == "__main__":
 
     script_dir = Path(__file__).parent
     input_folder = script_dir / "input"
-    output_folder = script_dir / "output"
 
     input_folder.mkdir(exist_ok=True)
-    output_folder.mkdir(exist_ok=True)
 
     parser = argparse.ArgumentParser(description="ReportSort — split Worldlink placement confirmation CSV")
     parser.add_argument("--log-type", choices=["post", "pre"], help="Log type: post or pre (skips interactive prompt)")
     parser.add_argument("--input-file", help="CSV file to process (default: auto-detect from input/)")
+    parser.add_argument("--output-folder", help="Output folder path (default: output/ next to main.py)")
     args = parser.parse_args()
 
     # Determine log type
@@ -487,6 +486,12 @@ if __name__ == "__main__":
             except KeyboardInterrupt:
                 print("\n\nCancelled by user.")
                 sys.exit(0)
+
+    if args.output_folder:
+        output_folder = Path(args.output_folder)
+    else:
+        output_folder = script_dir / "output"
+    output_folder.mkdir(parents=True, exist_ok=True)
 
     ctv_template_name = f"CTV{log_type}Template.xlsx"
     tac_template_name = f"TAC{log_type}Template.xlsx"
