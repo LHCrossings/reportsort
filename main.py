@@ -447,107 +447,105 @@ def split_csv_by_booking(input_file, output_folder, ctv_template_file, tac_templ
 
 
 if __name__ == "__main__":
+    import argparse
+
     script_dir = Path(__file__).parent
     input_folder = script_dir / "input"
     output_folder = script_dir / "output"
-    
+
     input_folder.mkdir(exist_ok=True)
     output_folder.mkdir(exist_ok=True)
-    
-    csv_files = list(input_folder.glob("*.csv"))
-    
-    if not csv_files:
-        print("No CSV files found in the 'input' folder.")
-        print(f"Please place your post-log CSV file in: {input_folder}")
-        input("\nPress Enter to exit...")
-        sys.exit(1)
-    
-    print("=" * 60)
-    print("POST-LOG REPORT SORTER")
-    print("=" * 60)
-    
-    # Ask which log type
-    print("\nAre you pulling postlogs or prelogs?")
-    print("  1. Postlogs (what has already aired)")
-    print("  2. Prelogs (what is scheduled to air)")
-    print()
-    
-    while True:
-        try:
-            log_choice = input("Enter 1 or 2: ").strip()
-            if log_choice == "1":
-                log_type = "Post"
-                ctv_template_name = "CTVPostTemplate.xlsx"
-                tac_template_name = "TACPostTemplate.xlsx"
-                break
-            elif log_choice == "2":
-                log_type = "Pre"
-                ctv_template_name = "CTVPreTemplate.xlsx"
-                tac_template_name = "TACPreTemplate.xlsx"
-                break
-            else:
-                print("Please enter 1 or 2")
-        except KeyboardInterrupt:
-            print("\n\nCancelled by user.")
-            sys.exit(0)
-    
-    print(f"\nLog Type: {log_type}logs")
-    
+
+    parser = argparse.ArgumentParser(description="ReportSort — split Worldlink placement confirmation CSV")
+    parser.add_argument("--log-type", choices=["post", "pre"], help="Log type: post or pre (skips interactive prompt)")
+    parser.add_argument("--input-file", help="CSV file to process (default: auto-detect from input/)")
+    args = parser.parse_args()
+
+    # Determine log type
+    if args.log_type:
+        log_type = args.log_type.capitalize()  # "Post" or "Pre"
+    else:
+        # Interactive mode
+        print("=" * 60)
+        print("POST-LOG REPORT SORTER")
+        print("=" * 60)
+        print("\nAre you pulling postlogs or prelogs?")
+        print("  1. Postlogs (what has already aired)")
+        print("  2. Prelogs (what is scheduled to air)")
+        print()
+        while True:
+            try:
+                log_choice = input("Enter 1 or 2: ").strip()
+                if log_choice == "1":
+                    log_type = "Post"
+                    break
+                elif log_choice == "2":
+                    log_type = "Pre"
+                    break
+                else:
+                    print("Please enter 1 or 2")
+            except KeyboardInterrupt:
+                print("\n\nCancelled by user.")
+                sys.exit(0)
+
+    ctv_template_name = f"CTV{log_type}Template.xlsx"
+    tac_template_name = f"TAC{log_type}Template.xlsx"
     ctv_template_file = script_dir / ctv_template_name
     tac_template_file = script_dir / tac_template_name
-    
     ctv_exists = ctv_template_file.exists()
     tac_exists = tac_template_file.exists()
-    
+
+    print(f"\nLog Type: {log_type}logs")
     print("\nTemplate Status:")
-    if ctv_exists:
-        print(f"  ✓ Crossings TV: {ctv_template_name}")
-    else:
-        print(f"  ✗ Crossings TV: {ctv_template_name} (NOT FOUND)")
-    
-    if tac_exists:
-        print(f"  ✓ The Asian Channel: {tac_template_name}")
-    else:
-        print(f"  ✗ The Asian Channel: {tac_template_name} (NOT FOUND)")
-    
+    print(f"  {'OK' if ctv_exists else 'MISSING'} Crossings TV: {ctv_template_name}")
+    print(f"  {'OK' if tac_exists else 'MISSING'} The Asian Channel: {tac_template_name}")
+
     if not ctv_exists and not tac_exists:
-        print("\n⚠ ERROR: No templates found!")
-        print(f"Please create {ctv_template_name} and/or {tac_template_name}")
-        input("\nPress Enter to exit...")
+        print(f"\n[ERROR] No templates found!")
         sys.exit(1)
-    
-    print("\nNote: The script will automatically select the correct template")
-    print("      based on the market (Dallas = TAC, Others = CTV)")
-    
-    print("\nAvailable CSV files in 'input' folder:\n")
-    
-    for idx, file in enumerate(csv_files, 1):
-        file_size = file.stat().st_size / 1024
-        print(f"  {idx}. {file.name} ({file_size:.1f} KB)")
-    
-    print("\n" + "=" * 60)
-    
-    while True:
-        try:
-            choice = input(f"\nEnter the number of the file to process (1-{len(csv_files)}): ").strip()
-            choice_num = int(choice)
-            if 1 <= choice_num <= len(csv_files):
-                selected_file = csv_files[choice_num - 1]
-                break
-            else:
-                print(f"Please enter a number between 1 and {len(csv_files)}")
-        except ValueError:
-            print("Please enter a valid number")
-        except KeyboardInterrupt:
-            print("\n\nCancelled by user.")
-            sys.exit(0)
-    
+
+    # Determine input file
+    if args.input_file:
+        selected_file = Path(args.input_file)
+        if not selected_file.exists():
+            print(f"[ERROR] Input file not found: {selected_file}")
+            sys.exit(1)
+    else:
+        csv_files = list(input_folder.glob("*.csv"))
+        if not csv_files:
+            print(f"[ERROR] No CSV files found in: {input_folder}")
+            sys.exit(1)
+
+        if len(csv_files) == 1 or args.log_type:
+            # Non-interactive: use first/only CSV
+            selected_file = csv_files[0]
+            print(f"\nInput file: {selected_file.name}")
+        else:
+            print("\nAvailable CSV files:\n")
+            for idx, file in enumerate(csv_files, 1):
+                print(f"  {idx}. {file.name} ({file.stat().st_size / 1024:.1f} KB)")
+            print()
+            while True:
+                try:
+                    choice = input(f"Enter number (1-{len(csv_files)}): ").strip()
+                    choice_num = int(choice)
+                    if 1 <= choice_num <= len(csv_files):
+                        selected_file = csv_files[choice_num - 1]
+                        break
+                    else:
+                        print(f"Please enter a number between 1 and {len(csv_files)}")
+                except ValueError:
+                    print("Please enter a valid number")
+                except KeyboardInterrupt:
+                    print("\n\nCancelled by user.")
+                    sys.exit(0)
+
     print(f"\nProcessing: {selected_file.name}")
     print("=" * 60 + "\n")
-    
+
     try:
         split_csv_by_booking(
-            str(selected_file), 
+            str(selected_file),
             str(output_folder),
             str(ctv_template_file) if ctv_exists else None,
             str(tac_template_file) if tac_exists else None,
@@ -556,10 +554,12 @@ if __name__ == "__main__":
         print("\n" + "=" * 60)
         print("COMPLETE!")
         print("=" * 60)
-        input("\nPress Enter to exit...")
+        if not args.log_type:
+            input("\nPress Enter to exit...")
     except Exception as e:
-        print(f"\nError: {str(e)}")
+        print(f"\n[ERROR] {str(e)}")
         import traceback
         traceback.print_exc()
-        input("\nPress Enter to exit...")
+        if not args.log_type:
+            input("\nPress Enter to exit...")
         sys.exit(1)

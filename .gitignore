@@ -1,0 +1,7 @@
+output/
+input/
+*.Zone.Identifier
+*:Zone.Identifier
+__pycache__/
+*.pyc
+.venv/
