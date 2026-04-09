@@ -1,0 +1,5 @@
+Run this in powershell window:
+
+	pip install openpyxl
+
+This installs the libraries required.
