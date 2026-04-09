@@ -427,7 +427,7 @@ def split_csv_by_booking(input_file, output_folder, ctv_template_file, tac_templ
         market_list = ', '.join(sorted(markets_in_booking))
         print(f"  Created: {output_file.name} ({len(rows)} spots) - {template_name} - Markets: {market_list}")
     
-    print(f"\n✓ Successfully created {len(bookings_data)} files in '{output_folder}' folder")
+    print(f"\n[DONE] Successfully created {len(bookings_data)} files in '{output_folder}' folder")
     
     # Display warning for files with unplaced spots
     if files_with_unplaced:
