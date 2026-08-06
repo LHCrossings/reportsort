@@ -82,35 +82,48 @@ def convert_value(value_str):
     
     return value_str
 
-def split_csv_by_booking(input_file, output_folder, ctv_template_file, tac_template_file, booking_column):
-    """Split CSV file into separate Excel files per booking"""
+def split_csv_by_booking(input_file, output_folder, ctv_template_file, tac_template_file, booking_column,
+                         only_booking=None):
+    """Split CSV file into separate Excel files per booking.
+
+    only_booking: when set, keep ONLY rows whose booking equals this exact code
+    and skip the booking-validity heuristics. Used for single-contract pulls,
+    where the contract code is known up front — the heuristics reject any code
+    that doesn't start with a letter (e.g. "3Fold LRCC 2611"), which would
+    silently produce zero files.
+    """
     output_path = Path(output_folder)
-    output_path.mkdir(exist_ok=True)
-    
+    output_path.mkdir(parents=True, exist_ok=True)
+
     print(f"Reading {Path(input_file).name}...")
-    
+
     with open(input_file, 'r', encoding='utf-8-sig', newline='') as f:
         reader = csv.reader(f)
         all_data = list(reader)
-    
-    if len(all_data) > 3:
-        print("Skipping first 3 rows (old header format)")
-        csv_headers = all_data[3]
-        while csv_headers and not csv_headers[-1].strip():
-            csv_headers.pop()
-        print(f"Found {len(csv_headers)} column headers")
-        
-        all_rows = []
-        for row_data in all_data[4:]:
-            if any(cell.strip() for cell in row_data):
-                row_dict = {}
-                for i, header in enumerate(csv_headers):
-                    if i < len(row_data):
-                        row_dict[header] = row_data[i].strip()
-                    else:
-                        row_dict[header] = ''
-                all_rows.append(row_dict)
-    
+
+    if len(all_data) <= 3:
+        raise RuntimeError(
+            f"Report contains no data rows ({len(all_data)} line(s) total) — "
+            "check the contract and date range."
+        )
+
+    print("Skipping first 3 rows (old header format)")
+    csv_headers = all_data[3]
+    while csv_headers and not csv_headers[-1].strip():
+        csv_headers.pop()
+    print(f"Found {len(csv_headers)} column headers")
+
+    all_rows = []
+    for row_data in all_data[4:]:
+        if any(cell.strip() for cell in row_data):
+            row_dict = {}
+            for i, header in enumerate(csv_headers):
+                if i < len(row_data):
+                    row_dict[header] = row_data[i].strip()
+                else:
+                    row_dict[header] = ''
+            all_rows.append(row_dict)
+
     print(f"Found {len(all_rows)} total rows")
     print(f"\nCSV Columns ({len(csv_headers)}):")
     for idx, header in enumerate(csv_headers, 1):
@@ -154,9 +167,18 @@ def split_csv_by_booking(input_file, output_folder, ctv_template_file, tac_templ
     
     for row in all_rows:
         booking = row.get(booking_column, '').strip()
+
+        if only_booking is not None:
+            # Single-contract pull: the code is known, so match it exactly.
+            # No heuristics — that also drops the report's own footer rows
+            # ("Textbox97", page totals) for free.
+            if booking == only_booking:
+                bookings_data.setdefault(booking, []).append(row)
+            continue
+
         if booking:
             is_valid = True
-            
+
             if booking.replace(',', '').replace('.', '').replace(' ', '').isdigit():
                 is_valid = False
             
@@ -182,6 +204,13 @@ def split_csv_by_booking(input_file, output_folder, ctv_template_file, tac_templ
         if len(invalid_bookings) > 5:
             print(f"  ... and {len(invalid_bookings) - 5} more")
     
+    if only_booking is not None and not bookings_data:
+        seen = sorted({r.get(booking_column, '').strip() for r in all_rows if r.get(booking_column, '').strip()})
+        raise RuntimeError(
+            f"No rows matched contract {only_booking!r}. "
+            f"Codes present in the report: {seen or 'none'}"
+        )
+
     print(f"\nFound {len(bookings_data)} unique bookings:")
     for booking, rows in sorted(bookings_data.items()):
         print(f"  {booking}: {len(rows)} spots")
@@ -458,6 +487,7 @@ if __name__ == "__main__":
     parser.add_argument("--log-type", choices=["post", "pre"], help="Log type: post or pre (skips interactive prompt)")
     parser.add_argument("--input-file", help="CSV file to process (default: auto-detect from input/)")
     parser.add_argument("--output-folder", help="Output folder path (default: output/ next to main.py)")
+    parser.add_argument("--only-booking", help="Keep only rows for this exact contract code (single-contract pull)")
     args = parser.parse_args()
 
     # Determine log type
@@ -554,7 +584,8 @@ if __name__ == "__main__":
             str(output_folder),
             str(ctv_template_file) if ctv_exists else None,
             str(tac_template_file) if tac_exists else None,
-            'COD_CONTRATTO1'
+            'COD_CONTRATTO1',
+            only_booking=args.only_booking,
         )
         print("\n" + "=" * 60)
         print("COMPLETE!")
