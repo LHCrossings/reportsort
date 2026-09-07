@@ -86,12 +86,16 @@ def split_csv_by_booking(input_file, output_folder, ctv_template_file, tac_templ
                          only_booking=None):
     """Split CSV file into separate Excel files per booking.
 
-    only_booking: when set, keep ONLY rows whose booking equals this exact code
-    and skip the booking-validity heuristics. Used for single-contract pulls,
-    where the contract code is known up front — the heuristics reject any code
-    that doesn't start with a letter (e.g. "3Fold LRCC 2611"), which would
-    silently produce zero files.
+    only_booking: when set, keep ONLY rows whose booking is one of these exact
+    codes (a single code or any iterable of codes) and skip the booking-validity
+    heuristics. Used for single-contract pulls and agency pulls, where the codes
+    are known up front — the heuristics reject any code that doesn't start with
+    a letter (e.g. "3Fold LRCC 2611"), which would silently produce zero files.
     """
+    if only_booking is not None and isinstance(only_booking, str):
+        only_booking = {only_booking}
+    elif only_booking is not None:
+        only_booking = set(only_booking)
     output_path = Path(output_folder)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -169,10 +173,10 @@ def split_csv_by_booking(input_file, output_folder, ctv_template_file, tac_templ
         booking = row.get(booking_column, '').strip()
 
         if only_booking is not None:
-            # Single-contract pull: the code is known, so match it exactly.
-            # No heuristics — that also drops the report's own footer rows
-            # ("Textbox97", page totals) for free.
-            if booking == only_booking:
+            # Single-contract / agency pull: the codes are known, so match them
+            # exactly. No heuristics — that also drops the report's own footer
+            # rows ("Textbox97", page totals) for free.
+            if booking in only_booking:
                 bookings_data.setdefault(booking, []).append(row)
             continue
 
@@ -206,8 +210,9 @@ def split_csv_by_booking(input_file, output_folder, ctv_template_file, tac_templ
     
     if only_booking is not None and not bookings_data:
         seen = sorted({r.get(booking_column, '').strip() for r in all_rows if r.get(booking_column, '').strip()})
+        wanted = sorted(only_booking)
         raise RuntimeError(
-            f"No rows matched contract {only_booking!r}. "
+            f"No rows matched contract{'s' if len(wanted) > 1 else ''} {wanted}. "
             f"Codes present in the report: {seen or 'none'}"
         )
 
@@ -487,7 +492,8 @@ if __name__ == "__main__":
     parser.add_argument("--log-type", choices=["post", "pre"], help="Log type: post or pre (skips interactive prompt)")
     parser.add_argument("--input-file", help="CSV file to process (default: auto-detect from input/)")
     parser.add_argument("--output-folder", help="Output folder path (default: output/ next to main.py)")
-    parser.add_argument("--only-booking", help="Keep only rows for this exact contract code (single-contract pull)")
+    parser.add_argument("--only-booking", action="append",
+                        help="Keep only rows for this exact contract code; repeat for several (single-contract / agency pulls)")
     args = parser.parse_args()
 
     # Determine log type
